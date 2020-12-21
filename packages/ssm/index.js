@@ -1,6 +1,14 @@
 const SSM = require('aws-sdk/clients/ssm')
 let ssmInstance
 
+const chunk = (list, max) => {
+  const chunks = [];
+  for (let index = 0; index < list.length; index += max) {
+    chunks.push(list.slice(index, index + max))
+  }
+  return chunks
+};
+
 module.exports = opts => {
   const defaults = {
     awsSdkOptions: {
@@ -60,14 +68,17 @@ module.exports = opts => {
       )
       const ssmParamNames = getSSMParamValues(options.names)
       if (ssmParamNames.length) {
-        const ssmPromise = ssmInstance
-          .getParameters({ Names: ssmParamNames, WithDecryption: true })
-          .promise()
-          .then(handleInvalidParams)
-          .then(ssmResponse =>
-            getParamsToAssignByName(options.names, ssmResponse)
+        const ssmParamNamesChunks = chunk(ssmParamNames, 10);
+        ssmPromises.push(
+          ...ssmParamNamesChunks.map(ssmParamNames => ssmInstance
+            .getParameters({ Names: ssmParamNames, WithDecryption: true })
+            .promise()
+            .then(handleInvalidParams)
+            .then(ssmResponse =>
+              getParamsToAssignByName(options.names, ssmResponse)
+            )
           )
-        ssmPromises.push(ssmPromise)
+        )
       }
 
       return Promise.all(ssmPromises).then(objectsToMap => {
